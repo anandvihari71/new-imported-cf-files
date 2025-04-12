@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Main CloudFormation stack for VPC and EKS"
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Retain
+    Properties:
+      TemplateURL: https://cloudformation-template-module.s3.us-east-1.amazonaws.com/vpc.yml
+  
+  EKSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://cloudformation-template-module.s3.us-east-1.amazonaws.com/eks.yml
+      Parameters:
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        SubnetIds: !GetAtt VPCStack.Outputs.PublicSubnetIds

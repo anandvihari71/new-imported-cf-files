@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "EKS Cluster Stack"
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: "VPC ID"
+
+  SubnetIds:
+    Type: String
+    Description: "Comma-separated list of subnet IDs"
+
+Resources:
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: MyEKSCluster
+      Version: "1.27"
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref EKSSecurityGroup
+        SubnetIds: !Split [",", !Ref SubnetIds]
+
+  EKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for EKS"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+Outputs:
+  EKSClusterName:
+    Description: "EKS Cluster Name"
+    Value: !Ref EKSCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSClusterName"
