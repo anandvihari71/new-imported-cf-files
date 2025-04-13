@@ -10,6 +10,17 @@ aws cloudformation create-stack --stack-name K-POC-MainStack --template-url http
 
 aws s3 cp vpc.yml s3://cloudformation-template-module/
 aws s3 cp eks.yml s3://cloudformation-template-module/
+=======================================================================================
+copy all the files in the directory
+aws s3 cp . s3://cloudformation-templte-module/ --recursive --exclude "*" --include "*.yml"
+=============================================================================================
+
+aws s3 cp main.yml s3://cloudformation-templte-module/
+aws s3 cp vpc.yml s3://cloudformation-templte-module/
+aws s3 cp eks.yml s3://cloudformation-templte-module/
+aws s3 cp eks.yml s3://cloudformation-templte-module/
+
+oidc-fetch-lambda.yml alb-controller.yml
 
 aws cloudformation create-stack --stack-name K-POC-MainStack --template-body file://main.yml --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
 
