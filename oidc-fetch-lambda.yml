@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda Custom Resource to fetch EKS OIDC Provider ID
+
+Parameters:
+  ClusterName:
+    Type: String
+  Region:
+    Type: String
+  LambdaS3Bucket:
+    Type: String
+    Description: S3 bucket containing packaged Lambda zip
+  LambdaS3Key:
+    Type: String
+    Description: S3 key for the Lambda zip file
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Policies:
+        - PolicyName: DescribeEKSClusterPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: eks:DescribeCluster
+                Resource: !Sub arn:aws:eks:${Region}:${AWS::AccountId}:cluster/${ClusterName}
+        - PolicyName: LambdaS3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${LambdaS3Bucket}/${LambdaS3Key}
+
+
+  OIDCLookupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub FetchOIDC-${ClusterName}
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Code:
+        S3Bucket: !Ref LambdaS3Bucket
+        S3Key: !Ref LambdaS3Key
+
+  FetchOIDCCustomResource:
+    Type: Custom::OIDCProvider
+    Properties:
+      ServiceToken: !GetAtt OIDCLookupFunction.Arn
+      ClusterName: !Ref ClusterName
+      Region: !Ref Region
+
+Outputs:
+  OIDCProviderId:
+    Value: !GetAtt FetchOIDCCustomResource.OIDCProviderId
+  OIDCURL:
+    Value: !GetAtt FetchOIDCCustomResource.OIDCURL

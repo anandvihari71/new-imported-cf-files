@@ -6,12 +6,36 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DeletionPolicy: Retain
     Properties:
-      TemplateURL: https://cloudformation-template-module.s3.us-east-1.amazonaws.com/vpc.yml
-  
+      TemplateURL: https://cloudformation-template-cft.s3.ap-south-1.amazonaws.com/vpc.yml
+
   EKSStack:
     Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Retain
     Properties:
-      TemplateURL: https://cloudformation-template-module.s3.us-east-1.amazonaws.com/eks.yml
+      TemplateURL: https://cloudformation-template-cft.s3.ap-south-1.amazonaws.com/eks.yml
       Parameters:
         VpcId: !GetAtt VPCStack.Outputs.VpcId
-        SubnetIds: !GetAtt VPCStack.Outputs.PublicSubnetIds
+        SubnetIds: !GetAtt VPCStack.Outputs.PrivateSubnetIds
+  OIDCProviderLookupStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Retain
+    DependsOn: EKSStack
+    Properties:
+      TemplateURL: https://cloudformation-template-cft.s3.ap-south-1.amazonaws.com/oidc-fetch-lambda.yml
+      Parameters:
+        ClusterName: !GetAtt EKSStack.Outputs.EKSClusterName
+        Region: !Ref "AWS::Region"
+        LambdaS3Bucket: cloudformation-template-cft
+        LambdaS3Key: oidc-lambda.zip
+
+  ALBControllerStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Retain
+    DependsOn: OIDCProviderLookupStack
+    Properties:
+      TemplateURL: https://cloudformation-template-cft.s3.ap-south-1.amazonaws.com/alb-controller.yml
+      Parameters:
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        ClusterName: !GetAtt EKSStack.Outputs.EKSClusterName
+        PublicSubnetIds: !GetAtt VPCStack.Outputs.PublicSubnetIds
+        OIDCProviderId: !GetAtt OIDCProviderLookupStack.Outputs.OIDCProviderId

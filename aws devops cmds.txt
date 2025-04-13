@@ -1,0 +1,126 @@
+Note::
+1. self managed node/ manually created ec2 instance/node can have AL2023_ARM_64 
+2. EKS managed node groups doesn't support AL2023_ARM_64 still yet to add them, so use AL2_ARM_64
+3. Once you create worker node groups auto scaling groups will be created automcatically, The Auto Scaling Group (ASG) has created an instance.
+4 
+
+================
+
+aws cloudformation create-stack --stack-name K-POC-MainStack --template-url https://cloudformation-template-module.s3.us-east-1.amazonaws.com/main.yml --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+
+aws s3 cp vpc.yml s3://cloudformation-template-module/
+aws s3 cp eks.yml s3://cloudformation-template-module/
+
+aws cloudformation create-stack --stack-name K-POC-MainStack --template-body file://main.yml --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+
+
+aws cloudformation describe-stacks --stack-name K-POC-MainStack-VPCStack-6GIWEIJ8X2MD   --query "Stacks[0].Outputs"
+
+
+
+K-POC-MainStack-VPCStack-YXW66OAVALP7    K-POC-MainStack-VPCStack-6GIWEIJ8X2MD
+
+aws cloudformation update-stack --stack-name K-POC-MainStack-VPCStack-YXW66OAVALP7 --template-url https://cloudformation-template-module.s3.us-east-1.amazonaws.com/vpc.yml
+
+
+
+update stack
+K-POC-MainStack-EKSStack-6UVYDHKJQJ3T
+aws cloudformation update-stack --stack-name K-POC-MainStack-EKSStack-6UVYDHKJQJ3T --template-url https://cloudformation-template-module.s3.us-east-1.amazonaws.com/eks.yml
+
+aws eks describe-cluster --name MyEKSCluster
+aws eks list-nodegroups --cluster-name MyEKSCluster
+
+
+AMI ID for Node Group
+
+If you’re using a custom AMI, ensure it supports the EKS version.
+
+Run:
+
+sh
+Copy
+Edit
+aws ssm get-parameter --name /aws/service/eks/optimized-ami/<EKS_VERSION>/amazon-linux-2/recommended/image_id
+aws ssm get-parameter --name /aws/service/eks/optimized-ami/1.32/amazon-linux-2/recommended/image_id
+
+aws ssm get-parameter --name /aws/service/eks/optimized-ami/1.32/amazon-linux-2023-arm64/recommended/image_id --region us-east-1
+
+
+
+aws iam get-role --role-name K-POC-MainStack-EKSStack-1XR70BRKZ-NodeInstanceRole-wtEKfDWl4I9r --query 'Role.AssumeRolePolicyDocument'
+
+
+===================================================================================================================================
+If you’re deploying via CLI, use the --disable-rollback flag:
+
+sh
+Copy
+Edit
+aws cloudformation create-stack --stack-name EKSStack --template-body file://eks-template.yaml --capabilities CAPABILITY_NAMED_IAM --disable-rollback
+✅ This will prevent CloudFormation from deleting your resources on failure.
+
+
+====================================================================================================================================
+
+trust-policy
+should have root user entry to assume the role
+
+aws iam update-assume-role-policy --role-name K-POC-MainStack-EKSStack-1XR70BRKZ-NodeInstanceRole-wtEKfDWl4I9r --policy-document file://trust-policy.json
+
+==========================================================================================================================================================
+
+
+aws iam get-role-policy --role-name K-POC-MainStack-EKSStack-19AYO7H8FBG-EKSClusterRole-9Z0rOLopUIsl  --policy-name PassRolePolicy
+aws iam get-role --role-name K-POC-MainStack-EKSStack-1W9NV88XR35-EKSClusterRole-bufKQLWim9jt --query 'Role.Arn'
+
+
+aws iam get-role --role-name K-POC-MainStack-EKSStack-1W9NV88XR-NodeInstanceRole-ooRp06VBmlBu 
+
+aws iam get-role-policy --role-name K-POC-MainStack-EKSStack-9258B7N5DEL-EKSClusterRole-9fsvtQtP1vSQ --policy-name PassRolePolicy
+aws iam get-role --role-name K-POC-MainStack-EKSStack-9258B7N5D-NodeInstanceRole-nMhfcN3qYpsd
+
+aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::651706755820:role/K-POC-MainStack-EKSStack-9258B7N5DEL-EKSClusterRole-9fsvtQtP1vSQ --action-names "iam:PassRole"
+
+
+how to fix this denied option
+=========================================================================================================
+C:\d\Anand aws\cloudformation_modules>aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::651706755820:role/K-POC-MainStack-EKSStack-9258B7N5DEL-EKSClusterRole-9fsvtQtP1vSQ --action-names "iam:PassRole"
+{
+    "EvaluationResults": [
+        {
+            "EvalActionName": "iam:PassRole",
+            "EvalResourceName": "*",
+            "EvalDecision": "implicitDeny",
+            "MatchedStatements": [],
+            "MissingContextValues": [
+                "iam:AWSServiceName",
+                "aws:RequestTag/Name",
+                "iam:PassedToService"
+            ]
+        }
+    ]
+}
+
+
+C:\d\Anand aws\cloudformation_modules>
+
+as you said i have executed above 
+
+
+ChatGPT said:
+🔍 Issue Identified: implicitDeny on iam:PassRole
+Your iam:PassRole action is being denied at a higher level (either an IAM policy, SCP, or permission boundary).
+
+===================================================================================================================================
+
+aws iam list-attached-role-policies --role-name K-POC-MainStack-EKSStack-H55RV0C9X-NodeInstanceRole-9pBU2DTxndgL 
+
+aws eks describe-nodegroup --cluster-name MyEKSCluster --nodegroup-name NodeGroup-QFiJzDoBZxta --region us-east-1 --query "nodegroup.status"
+
+how to delete node group?
+aws eks delete-nodegroup --cluster-name MyEKSCluster --nodegroup-name NodeGroup-QFiJzDoBZxta --region us-east-1
+
+
+
+

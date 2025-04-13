@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ALB Controller Installation with IRSA and Helm'
+
+Parameters:
+  VpcId:
+    Type: String
+  ClusterName:
+    Type: String
+  PublicSubnetIds:
+    Type: String
+  OIDCProviderId:
+    Type: String
+    Description: "OIDC Provider ID for EKS cluster"
+
+Resources:
+  ALBOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !Sub "https://oidc.eks.${AWS::Region}.amazonaws.com/id/${OIDCProviderId}"
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - "9e99a48a9960b14926bb7f3b02e22da0ecd4e3c2"
+
+  ALBServiceAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref ALBOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                oidc.eks.${AWS::Region}.amazonaws.com/id/${OIDCProviderId}:sub: "system:serviceaccount:kube-system:aws-load-balancer-controller"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+        - arn:aws:iam::aws:policy/AWSLoadBalancerControllerIAMPolicy
+
+  HelmInstallFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt HelmInstallRole.Arn
+      Runtime: python3.9
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import subprocess
+
+          def handler(event, context):
+              try:
+                  cluster_name = event['ResourceProperties']['ClusterName']
+                  region = event['ResourceProperties']['Region']
+                  vpc_id = event['ResourceProperties']['VpcId']
+
+                  subprocess.run(["helm", "repo", "add", "eks", "https://aws.github.io/eks-charts"], check=True)
+                  subprocess.run(["helm", "repo", "update"], check=True)
+                  subprocess.run([
+                      "helm", "upgrade", "-i", "aws-load-balancer-controller", "eks/aws-load-balancer-controller",
+                      "--namespace", "kube-system",
+                      "--set", f"clusterName={cluster_name}",
+                      "--set", "serviceAccount.create=false",
+                      "--set", "serviceAccount.name=aws-load-balancer-controller",
+                      "--set", f"region={region}",
+                      "--set", f"vpcId={vpc_id}"
+                  ], check=True)
+                  return {"PhysicalResourceId": cluster_name}
+              except subprocess.CalledProcessError as e:
+                  raise Exception("Helm install failed: " + str(e))
+
+  HelmInstallCustomResource:
+    Type: Custom::HelmInstall
+    Properties:
+      ServiceToken: !GetAtt HelmInstallFunction.Arn
+      ClusterName: !Ref ClusterName
+      Region: !Ref "AWS::Region"
+      VpcId: !Ref VpcId
+
+  HelmInstallRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+        - arn:aws:iam::aws:policy/IAMFullAccess

@@ -8,19 +8,38 @@ Parameters:
 
   SubnetIds:
     Type: String
-    Description: "Comma-separated list of subnet IDs"
+    Description: "Comma-separated list of private subnet IDs"
 
 Resources:
   EKSCluster:
     Type: AWS::EKS::Cluster
     Properties:
       Name: MyEKSCluster
-      Version: "1.27"
+      Version: "1.31"
       RoleArn: !GetAtt EKSClusterRole.Arn
       ResourcesVpcConfig:
         SecurityGroupIds:
           - !Ref EKSSecurityGroup
         SubnetIds: !Split [",", !Ref SubnetIds]
+
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodeRole: !GetAtt EKSNodeInstanceRole.Arn
+      Subnets: !Split [",", !Ref SubnetIds]
+      ScalingConfig:
+        DesiredSize: 2
+        MaxSize: 3
+        MinSize: 1
+      AmiType: AL2_ARM_64
+      InstanceTypes:
+        - t4g.medium
+      DiskSize: 20
+      RemoteAccess:
+        Ec2SshKey: aws-keypair
+      Tags:
+        Name: !Sub "${AWS::StackName}-NodeGroup"
 
   EKSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -45,6 +64,23 @@ Resources:
               - "sts:AssumeRole"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  EKSNodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
 
 Outputs:
   EKSClusterName:
